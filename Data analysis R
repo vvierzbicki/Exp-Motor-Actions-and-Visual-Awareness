@@ -1,0 +1,105 @@
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(ggpubr)
+library(rstatix)
+library(lme4)
+
+# Set the directory containing the TSV files
+setwd("C:/Users/emwie/OneDrive/Dokumenty/phd/eksperyment 3/Dane")
+
+# List all TSV files in the directory
+file_list <- list.files(pattern = "*.tsv")
+
+# Function to read a file and convert dots_resp_rt to numeric
+read_and_convert <- function(file) {
+  df <- read.delim(file)
+  df$dots_resp_rt <- as.numeric(df$dots_resp_rt)
+  return(df)
+}
+
+# Read and process all files
+df_list <- lapply(file_list, read_and_convert)
+
+# Combine all dataframes into one
+df <- bind_rows(df_list)
+
+# fix motor_accuracy variable
+df$motor_accuracy[df$motor_cue=='no' & df$motor_act=='None'] <- 1
+
+# Remove rows
+df <- subset(df, PAS != 'None')
+df <- subset(df, dots_resp != 'None')
+df <- subset(df, !(motor_accuracy == 0))
+df <- subset(df, !(eyes_val == 0))
+df <- subset(df, !(block == 'tr2'))
+
+# convert character to numeric
+df$PAS <- as.numeric(df$PAS)
+
+df$condition <- with(df, ifelse(motor_cue == dots_direction,'cong','icon'))
+df$condition <- with(df, ifelse(motor_cue == 'no','no',
+                                ifelse(motor_cue == 'neutral','neutral', df$condition)))
+
+# Convert to factor before anova
+df$subject_ID <- as.factor(df$subject_ID)
+df$order <- as.factor(df$order)
+df$condition <- as.factor(df$condition)
+
+# Extract specific columns
+df <- df[c('subject_ID','order','condition','PAS','dots_accuracy')]
+
+# Group by and calculate means
+df <- df %>%
+  group_by(subject_ID, order, condition) %>%
+  summarize(PAS=mean(PAS),Accuracy = mean(dots_accuracy))
+
+df<-df%>%mutate(grand_mean=mean(PAS))%>%
+  group_by(order,condition)%>%mutate(meanOC=mean(PAS))%>%ungroup()%>%
+  group_by(order,subject_ID)%>%mutate(meanOsubj=mean(PAS))%>%ungroup()%>%
+  group_by(condition,subject_ID)%>%mutate(meanCsubj=mean(PAS))%>%ungroup()%>%
+  group_by(order)%>%mutate(meanO=mean(PAS))%>%ungroup()%>%  
+  group_by(condition)%>%mutate(meanC=mean(PAS))%>%ungroup()%>%
+  group_by(subject_ID)%>%mutate(subj_mean=mean(PAS))%>%
+  ungroup()
+
+df%>%arrange(subject_ID)
+
+summary(aov(Accuracy ~ order*condition + Error(subject_ID/(order*condition)), data=df))
+
+## Linear mixed model fit
+fit<-lmer(Accuracy~order*condition+(1|subject_ID)+(1|subject_ID:order)+(1|subject_ID:condition),data=df)
+summary(fit)
+
+#Analysis of Variance Table
+anova(fit)
+
+# pairwise comparisons
+pwcO <- df %>%
+  pairwise_t_test(
+    Accuracy ~ order, paired = TRUE,
+    p.adjust.method = "bonferroni"
+  )
+pwcO
+
+pwcC <- df %>%
+  pairwise_t_test(
+    Accuracy ~ condition, paired = TRUE,
+    p.adjust.method = "bonferroni"
+  )
+pwcC
+### Visualization: box plots with p-values
+
+pwcO <- pwcO %>% add_xy_position(x = "order", step.increase = 1)
+ggboxplot(df, x = "order", y = "Accuracy", title = 'Accuracy-Order',color = 'condition',
+          add = "dotplot",
+          palette = 'jco',
+          bxp.errorbar = TRUE) +
+  stat_pvalue_manual(pwcO)
+
+pwcC <- pwcC %>% add_xy_position(x = "condition", step.increase = 1)
+ggboxplot(df, x = "condition", y = "Accuracy", title = 'Accuracy-Condition',color = 'order',
+          add = "dotplot",
+          palette = 'jco',
+          bxp.errorbar = TRUE) +
+  stat_pvalue_manual(pwcC)
