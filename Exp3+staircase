@@ -1,0 +1,658 @@
+# Import necessary libraries
+from psychopy.hardware import keyboard
+import random
+import numpy as np
+from pathlib import Path
+from PIL import Image
+from psychopy import visual, event, core, gui, os, sys, data
+from psychopy.visual import ShapeStim
+from psychopy.tools.filetools import fromFile, toFile
+
+### eyetracking
+from psychopy import iohub, hardware
+import psychopy.iohub as io
+from psychopy.iohub import launchHubServer
+###
+
+Key1 = '7'      # PAS key 1
+Key2 = 'u'      # PAS key 2
+Key3 = 'j'      # PAS key 3
+Key4 = 'n'      # PAS key 4
+LK = 'b'     # Left Key
+CK = 'space'     # Central Key
+RK = 'm'    # Right Key
+
+trialrepeats = 20 #8 different conditions in 2 blocks
+trening_repeats = 1
+
+gui = gui.Dlg()
+gui.addField("Participant ID:")
+gui.addField('Age:')
+gui.addField('Gender:')
+gui.addField('Handedness:')
+gui.show()
+
+subj_id = gui.data[0]
+age = gui.data[1]
+gender = gui.data[2]
+handedness = gui.data[3]
+experimentName = "EXP3" 
+if gui.OK:
+    pass
+else:
+    core.quit()  # the user hit cancel so exit
+
+# checking if the file with the same name already exists
+if os.path.exists(subj_id + '.tsv'):
+    sys.exit("File " + subj_id+ '.tsv' + " already exists!")
+
+# make a text file to save staircase data
+fileName = gui.data[0] + 'staircase'
+dataFile = open(fileName+'.csv', 'w')  # a simple text file with 'comma-separated-values'
+dataFile.write('dotsDir,coherenceIncrement,correct\n')
+
+# save experiment data
+# open a new file instance
+log = open(subj_id + '.tsv', 'w')
+# define a header
+header = [
+    'subject_ID',
+    'coherenceLevel',
+    'block',
+    'trial',
+    'global_time',
+    'trial_time',
+    'order',
+    'motor_cue',
+    'motor_act',
+    'motor_act_rt',
+    'motor_accuracy',
+    'PAS',
+    'PAS_rt',
+    'dots_direction',
+    'dots_resp',
+    'dots_resp_rt',
+    'dots_accuracy',
+    'eyes_val'
+    ]
+# make all values in the header into strings
+dane = map(str, header)
+# join all string values into one string, separated by tabs ('\t')
+dane = '\t'.join(dane)
+# add a newline ('\n') to the string
+dane += '\n'
+# write the header to the log file
+log.write(dane)
+
+# create the staircase handler
+staircase = data.StairHandler(startVal = 0.3, nReversals = 5,
+                          stepType = 'lin', stepSizes=[0.08,0.08,0.04,0.02,0.01],
+                          nUp=1, nDown=3,  # will home in on the 80% threshold
+                          nTrials=100, minVal=0.005, maxVal=1.0)
+
+# create window and stimuli
+win = visual.Window([1920,1080],allowGUI=True, fullscr=True,
+    monitor='testMonitor', units='pix', color='#949494')
+
+dir_list = [0,180] #0 is right, 180 is left
+direction = np.random.choice(dir_list)
+
+# Set up dots stimulus
+dots = visual.DotStim(
+    win=win, name='dots', units='pix',
+    nDots=400, dotSize=4.44,
+    speed=7.5, dir=direction, coherence=0.4,
+    fieldPos=(0.0, 0.0), fieldSize=184.9, fieldAnchor='center', fieldShape='circle',
+    signalDots='same', noiseDots='position', dotLife=3,
+    color=[1.0,1.0,1.0], colorSpace='rgb', opacity=None
+    )
+
+### Eyetracking
+# --- Setup input devices ---
+ioConfig = {}
+
+# Setup eyetracking
+ioConfig['eyetracker.hw.tobii.EyeTracker'] = {
+    'name': 'tracker',
+    'model_name': 'Tobii Pro X3-120 EPU',
+    'serial_number': 'X3120-030118632525',
+    'runtime_settings': {
+        'sampling_rate': 120.0,
+    }
+}
+# Setup iohub keyboard
+ioConfig['Keyboard'] = dict(use_keymap='psychopy')
+
+ioSession = '1'
+filename = subj_id
+ioServer = io.launchHubServer(window=win, experiment_code='untitled', session_code=ioSession, datastore_name=filename, **ioConfig)
+eyetracker = ioServer.getDevice('tracker')
+
+# define target for calibration
+calibrationTarget = visual.TargetStim(win, 
+    name='calibrationTarget',
+    radius=10, fillColor='', borderColor='black', lineWidth=2.0,
+    innerRadius=10, innerFillColor='green', innerBorderColor='black', innerLineWidth=2.0,
+    colorSpace='rgb', units=None
+)
+# define parameters for calibration
+calibration = hardware.eyetracker.EyetrackerCalibration(win, 
+    eyetracker, calibrationTarget,
+    units=None, colorSpace='rgb',
+    progressMode='time', targetDur=1.5, expandScale=1.5,
+    targetLayout='FIVE_POINTS', randomisePos=True, textColor='white',
+    movementAnimation=True, targetDelay=1.0
+)
+# define region of interest
+roi = visual.Circle(win,
+    radius = 120, pos=(0, 0),
+    fillColor = None, lineColor = 'black')
+###     
+
+# Import instruction
+inst1 = visual.ImageStim(win, image='D:/Desktop/Wierzbicki/Eksperyment 3/Instrukcje/inst1.png')
+inst_staircase = visual.ImageStim(win, image='D:/Desktop/Wierzbicki/Eksperyment 3/Instrukcje/inst_staircase.png')
+inst_motor = visual.ImageStim(win, image='D:/Desktop/Wierzbicki/Eksperyment 3/Instrukcje/inst_motor.png')
+inst_PAS = visual.ImageStim(win, image='D:/Desktop/Wierzbicki/Eksperyment 3/Instrukcje/inst_PAS.png')
+inst_blok1 = visual.ImageStim(win, image='D:/Desktop/Wierzbicki/Eksperyment 3/Instrukcje/inst_blok1.png')
+inst_blok2 = visual.ImageStim(win, image='D:/Desktop/Wierzbicki/Eksperyment 3/Instrukcje/inst_blok2.png')
+inst_pause = visual.ImageStim(win, image='D:/Desktop/Wierzbicki/Eksperyment 3/Instrukcje/pause.png')
+inst_end = visual.ImageStim(win, image='D:/Desktop/Wierzbicki/Eksperyment 3/Instrukcje/end.png')
+
+# Import motor action cues
+left_act = visual.ImageStim(win, image='D:/Desktop/Wierzbicki/Eksperyment 3/Instrukcje/left_act.png')
+right_act = visual.ImageStim(win, image='D:/Desktop/Wierzbicki/Eksperyment 3/Instrukcje/right_act.png')
+neutral_act = visual.ImageStim(win, image='D:/Desktop/Wierzbicki/Eksperyment 3/Instrukcje/neutral_act.png')
+no_act = visual.ImageStim(win, image='D:/Desktop/Wierzbicki/Eksperyment 3/Instrukcje/no_act.png')
+
+# Import responses screen
+response_1 = visual.ImageStim(win, image='D:/Desktop/Wierzbicki/Eksperyment 3/Instrukcje/dir_resp.png')
+response_pas = visual.ImageStim(win, image='D:/Desktop/Wierzbicki/Eksperyment 3/Instrukcje/PAS.png')
+
+# Create fixation point
+circle1 = visual.Circle(win, radius = 12, pos=(0, 0), fillColor = (1, -1, -1), colorSpace = 'rgb', lineColor = None)
+circle2 = visual.Circle(win, radius = 2, pos=(0, 0), fillColor = (1, -1, -1), colorSpace = 'rgb', lineColor = None)
+lineY = visual.Rect(win, units = 'pix', size = (5, 25), fillColor= 'gray',  pos = (0, 0), lineColor = None)
+lineX = visual.Rect(win, units = 'pix', size = (25, 5), fillColor= 'gray',  pos = (0, 0), lineColor = None)
+
+# and some handy clocks to keep track of time
+globalClock = core.Clock()
+trialClock = core.Clock()
+
+event.Mouse(visible=False, win=win) # Hide mouse
+
+###
+# run calibration
+calibration.run()
+# eyetracker start recording
+eyetracker.setRecordingState(True)
+###
+
+### Staircase
+# display instructions and wait
+inst1.draw()
+win.flip()
+core.wait(2) # in case of accidentally pressing a key too soon
+inst1key = event.waitKeys()
+for key in inst1key: # emergency exit ;)
+    if key[0] == 'q':
+        sys.exit('User quit')
+
+inst_staircase.draw()
+win.flip()
+core.wait(2) # in case of accidentally pressing a key too soon
+inst1key = event.waitKeys()
+for key in inst1key: # emergency exit ;)
+    if key[0] == 'q':
+        sys.exit('User quit')
+
+for thisIncrement in staircase:  # will continue the staircase until it terminates!
+    # set orientation of stimuli
+    dots.dir = random.choice([0,180])  # will be either 0(right) or 180(left)
+    dots.coherence = thisIncrement
+    # ISI
+    trialClock.reset()
+    while trialClock.getTime() < 0.5:
+        win.flip()
+    # draw all stimuli
+    for frame in range(60):
+        dots.draw()
+        win.flip()
+    
+    # Dots direction discrimination
+    response_1.draw()
+    win.flip()
+    
+    # wait 500ms; but use a loop of x frames for more accurate timing
+    #core.wait(0.5)
+    
+    # get response
+    thisResp=None
+    while thisResp==None:
+        allKeys=event.waitKeys()
+        for thisKey in allKeys:
+            if thisKey==LK:
+                if dots.dir==180: thisResp = 1  # correct
+                else: thisResp = 0              # incorrect
+            elif thisKey==RK:
+                if dots.dir== 0: thisResp = 1  # correct
+                else: thisResp = 0              # incorrect
+            elif thisKey in ['q', 'escape']:
+                core.quit()  # abort experiment
+        event.clearEvents()  # clear other (eg mouse) events - they clog the buffer
+
+    # add the data to the staircase so it can calculate the next level
+    staircase.addData(thisResp)
+    dataFile.write('%i,%.4f,%i\n' %(dots.dir, thisIncrement, thisResp))
+    #core.wait(1)
+
+# staircase has ended
+dataFile.close()
+staircase.saveAsPickle(fileName)  # special python binary file to save all the info
+
+# give some output to user in the command line in the output window
+print('reversals:')
+print(staircase.reversalIntensities)
+approxThreshold = np.average(staircase.reversalIntensities[-10:])
+print('mean of final 10 reversals = %.4f' % (approxThreshold))
+
+dots.coherence = approxThreshold # set individual coherence stimmuli level
+
+# Set up conditions
+B1conditions =[
+            {'action': 'left', 'order': 'MP', 'dir': 'left'},
+            {'action': 'left', 'order': 'MP', 'dir': 'right'},
+            {'action': 'right', 'order': 'MP', 'dir': 'left'},
+            {'action': 'right', 'order': 'MP', 'dir': 'right'},
+            {'action': 'neutral', 'order': 'MP', 'dir': 'left'},
+            {'action': 'neutral', 'order': 'MP', 'dir': 'right'},
+            {'action': 'no', 'order': 'MP', 'dir': 'left'},
+            {'action': 'no', 'order': 'MP', 'dir': 'right'}]
+B2conditions = [
+            {'action': 'left', 'order': 'PM', 'dir': 'left'},
+            {'action': 'left', 'order': 'PM', 'dir': 'right'},
+            {'action': 'right', 'order': 'PM', 'dir': 'left'},
+            {'action': 'right', 'order': 'PM', 'dir': 'right'},
+            {'action': 'neutral', 'order': 'PM', 'dir': 'left'},
+            {'action': 'neutral', 'order': 'PM', 'dir': 'right'},
+            {'action': 'no', 'order': 'PM', 'dir': 'left'},
+            {'action': 'no', 'order': 'PM', 'dir': 'right'}]
+
+clock = core.Clock() # Set up clock
+
+kb = keyboard.Keyboard() # Set up keyboard
+
+event.Mouse(visible=False, win=win) # Hide mouse
+
+# Prepare trials repeats and shuffle
+trening1trials = []
+trening1trials = (trening_repeats * B1conditions)
+random.shuffle(trening1trials)
+trening2trials = []
+trening2trials = (trening_repeats * B1conditions)
+random.shuffle(trening2trials)
+
+B1trials = []
+B2trials = []
+B1trials = (trialrepeats * B1conditions)
+B2trials = (trialrepeats * B2conditions)
+random.shuffle(B1trials)
+random.shuffle(B2trials)
+
+############## BLOCKS
+# Motor Action - Perception
+# Perception - Motor Action
+
+blocks = []
+blockTypes = [{'type': 'tr1'}, {'type' : 'tr2'}, {'type': 'MP'}, {'type' : 'PM'}]
+blocks = blockTypes
+#random.shuffle(blocks)
+
+for b in blocks:
+    
+    if b['type'] == 'tr1':
+        pas_val = 0
+        block = 'tr1'
+        trial_n = 0
+        alltrials = trening1trials
+        inst_motor.draw()
+        win.flip()
+        core.wait(2)
+        inst1key = event.waitKeys()
+        for key in inst1key: # emergency exit ;)
+            if key[0] == 'q':
+                sys.exit('User quit')
+    if b['type'] == 'tr2':
+        pas_val = 1
+        block = 'tr2'
+        trial_n = 0
+        alltrials = trening2trials
+        inst_PAS.draw()
+        win.flip()
+        core.wait(2)
+        inst1key = event.waitKeys()
+        for key in inst1key: # emergency exit ;)
+            if key[0] == 'q':
+                sys.exit('User quit')
+    
+    if b['type'] == 'MP':
+        pas_val = 1
+        block = 1
+        trial_n = 0
+        alltrials = B1trials
+        inst_blok1.draw()
+        win.flip()
+        core.wait(2)
+        inst1key = event.waitKeys()
+        for key in inst1key: # emergency exit ;)
+            if key[0] == 'q':
+                sys.exit('User quit')
+        
+    if b['type'] == 'PM':
+        pas_val = 1
+        block = 2
+        trial_n = 0
+        alltrials = B2trials
+        inst_blok2.draw()
+        win.flip()
+        core.wait(2)
+        inst1key = event.waitKeys()
+        for key in inst1key: # emergency exit ;)
+            if key[0] == 'q':
+                sys.exit('User quit')
+
+    # Trial start
+    for thisTrial in alltrials:
+        
+        kb.clearEvents()
+        
+        trialClock.reset()
+        T1 = globalClock.getTime()
+        
+        if thisTrial['dir'] == 'left':
+            dots.dir = 180
+        else:
+            dots.dir = 0
+        
+        if thisTrial['order'] == 'MP':
+        
+            clock.reset()
+            motor_key = None
+            
+            if thisTrial['action'] == 'left':
+                left_act.draw()
+                win.flip()
+                clock.reset()
+                motor_key = event.waitKeys(
+                    maxWait=3.0,
+                    keyList=[LK,RK,CK],
+                    timeStamped=clock)
+
+            if thisTrial['action'] == 'right':
+                right_act.draw()
+                win.flip()
+                clock.reset()
+                motor_key = event.waitKeys(
+                    maxWait=3.0,
+                    keyList=[LK,RK,CK],
+                    timeStamped=clock)
+                    
+            if thisTrial['action'] == 'neutral':
+                neutral_act.draw()
+                win.flip()
+                clock.reset()
+                motor_key = event.waitKeys(
+                    maxWait=3.0,
+                    keyList=[LK,RK,CK],
+                    timeStamped=clock)
+
+            if thisTrial['action'] == 'no':
+                for frame in range(120):
+                    no_act.draw()
+                    win.flip()
+            
+            # separate key from reaction time, if no reaction write "None"
+            if (motor_key is not None):
+                for key in motor_key:
+                    motor_act = key[0]
+                    motor_act_rt = key[1]
+            else:
+                motor_act = None
+                motor_act_rt = None
+
+            # Present dots
+            clock.reset()
+            for frame in range(75):
+                if frame >= 0 and frame <= 14:
+                    circle1.draw()
+                    circle2.draw()
+                    lineX.draw()
+                    lineY.draw()
+                    win.flip()
+
+                if frame >=15 and frame <= 75:
+                    dots.draw()
+                    win.flip()
+                    # get last eye position
+                    gpos = eyetracker.getLastGazePosition()
+                    if isinstance(gpos, (tuple, list)):
+                        if roi.contains(gpos):
+                            eyes_val = 1
+                        else:
+                            eyes_val = 0
+
+            # 1s break between perception and PAS
+            for frame in range(120):
+                no_act.draw()
+                win.flip()
+
+        if thisTrial['order'] == 'PM':
+        
+            clock.reset()
+            motor_key = None
+            
+            # Present dots
+            clock.reset()
+            for frame in range(75):
+                if frame >= 0 and frame <= 14:
+                    circle1.draw()
+                    circle2.draw()
+                    lineX.draw()
+                    lineY.draw()
+                    win.flip()
+
+                if frame >=15 and frame <= 75:
+                    dots.draw()
+                    win.flip()
+                    # get last eye position
+                    gpos = eyetracker.getLastGazePosition()
+                    if isinstance(gpos, (tuple, list)):
+                        if roi.contains(gpos):
+                            eyes_val = 1
+                        else:
+                            eyes_val = 0
+
+            if thisTrial['action'] == 'left':
+                left_act.draw()
+                win.flip()
+                clock.reset()
+                motor_key = event.waitKeys(
+                    maxWait=3.0,
+                    keyList=[LK,RK,CK],
+                    timeStamped=clock)
+
+            if thisTrial['action'] == 'right':
+                right_act.draw()
+                win.flip()
+                clock.reset()
+                motor_key = event.waitKeys(
+                    maxWait=3.0,
+                    keyList=[LK,RK,CK],
+                    timeStamped=clock)
+                    
+            if thisTrial['action'] == 'neutral':
+                neutral_act.draw()
+                win.flip()
+                clock.reset()
+                motor_key = event.waitKeys(
+                    maxWait=3.0,
+                    keyList=[LK,RK,CK],
+                    timeStamped=clock)
+
+            if thisTrial['action'] == 'no':
+                for frame in range(120):
+                    no_act.draw()
+                    win.flip()
+            
+            # separate key from reaction time, if no reaction write "None"
+            if (motor_key is not None):
+                for key in motor_key:
+                    motor_act = key[0]
+                    motor_act_rt = key[1]
+            else:
+                motor_act = None
+                motor_act_rt = None
+
+        if pas_val == 1:
+            # PAS scale response
+            clock.reset()
+            response_pas.draw()
+            win.flip()
+            PAS_key = event.waitKeys(maxWait=3.0, 
+                keyList=[Key1,Key2,Key3,Key4], 
+                timeStamped=clock)
+
+            # separate key from reaction time, if no reaction write "None"
+            if (PAS_key is not None):
+                for key in PAS_key:
+                    PAS = key[0]
+                    PAS_rt = key[1]
+            else:
+                PAS = None
+                PAS_rt = None
+        else:
+            PAS = None
+            PAS_rt = None
+            pass
+
+        # Dots direction discrimination
+        clock.reset()
+        response_1.draw()
+        win.flip()
+        dots_key = event.waitKeys(maxWait=3.0, 
+            keyList=[LK,RK], 
+            timeStamped=clock)
+
+        # separate key from reaction time, if no reaction write "None"
+        if (dots_key is not None):
+            for key in dots_key:
+                dots_resp = key[0]
+                dots_resp_rt = key[1]
+        else:
+            dots_resp = None
+            dots_resp_rt = None
+
+        trial_n += 1 # update the trial number
+        T2 = trialClock.getTime() # get trial time
+
+        # Suggest a break in the middle of block
+        if trial_n == 80:
+            inst_pause.draw()
+            win.flip()
+            core.wait(2)
+            inst1key = event.waitKeys()
+            for key in inst1key: # emergency exit ;)
+                if key[0] == 'q':
+                    sys.exit('User quit')
+        else:
+            pass
+
+        # reduce reaction times to 3 decimal places
+        if (motor_act_rt is not None):
+            motor_act_rt = f"{motor_act_rt:.3f}"
+        if (PAS_rt is not None):
+            PAS_rt = f"{PAS_rt:.3f}"
+        if (dots_resp_rt is not None):
+            dots_resp_rt = f"{dots_resp_rt:.3f}"
+
+        T1 = f"{T1:.3f}"
+        T2 = f"{T2:.3f}"
+
+        # Convert responses
+        if motor_act == 'b':
+            motor_act = 'left'
+        if motor_act == 'm':
+            motor_act = 'right'
+        if motor_act == 'space':
+            motor_act = 'neutral'
+
+        if PAS == '7':
+            PAS = '1'
+        if PAS == 'u':
+            PAS = '2'
+        if PAS == 'j':
+            PAS = '3'
+        if PAS == 'n':
+            PAS = '4'
+
+        if dots_resp == 'b':
+            dots_resp = 'left'
+        if dots_resp == 'm':
+            dots_resp = 'right'
+
+        # Convert dots direction to text
+        if dots.dir == 0:
+            dots_dir = 'right'
+        else:
+            dots_dir = 'left'
+
+        # Accuracy check
+        if thisTrial['action'] == motor_act:
+            motor_acc = 1
+        else:
+            motor_acc = 0
+        
+        if dots_dir == dots_resp:
+            dots_acc = 1
+        else:
+            dots_acc = 0
+
+        # collect all interesting values in a single list
+        dane = [
+            subj_id,
+            approxThreshold,
+            block,
+            trial_n,
+            T1,
+            T2,
+            thisTrial['order'],
+            thisTrial['action'],
+            motor_act,
+            motor_act_rt,
+            motor_acc,
+            PAS,
+            PAS_rt,
+            dots_dir,
+            dots_resp,
+            dots_resp_rt,
+            dots_acc,
+            eyes_val
+            ]
+        
+        # turn all values into strings
+        dane = map(str, dane)
+        # join all string values into one string, separated by tabs ('\t')
+        dane = '\t'.join(dane)
+        # add a newline ('\n') to the string
+        dane += '\n'
+        # write the header to the log file
+        log.write(dane)
+
+inst_end.draw()
+win.flip()
+core.wait(2)
+event.waitKeys()
+
+log.close()
+win.close()
+core.quit()
